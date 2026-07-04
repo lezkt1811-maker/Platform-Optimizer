@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StarChart13 Creator Intelligence Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Mobile top bar -->
+  <div class="topbar">
+    <button id="hamburgerBtn" class="icon-btn" aria-label="Open menu">☰</button>
+    <div class="logo">
+      <div class="logo-badge">★</div>
+      <span class="logo-text">StarChart13</span>
+    </div>
+    <span style="width:24px"></span>
+  </div>
+
+  <!-- Nav drawer (mobile) / sidebar (desktop) -->
+  <div id="drawerOverlay" class="drawer-overlay hidden"></div>
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-head">
+      <div class="logo">
+        <div class="logo-badge">★</div>
+        <div>
+          <div class="logo-text">StarChart13</div>
+          <div class="logo-sub">CREATOR INTELLIGENCE</div>
+        </div>
+      </div>
+      <button id="closeDrawerBtn" class="icon-btn close-only" aria-label="Close menu">✕</button>
+    </div>
+    <nav id="nav" class="nav"></nav>
+    <div id="quickStats" class="quick-stats"></div>
+  </aside>
+
+  <main id="app" class="app"></main>
+
+  <script src="app.js"></script>
+</body>
+</html>
