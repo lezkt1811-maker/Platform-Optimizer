@@ -305,6 +305,7 @@ input[type="number"]{
 }
 .gallery-status.done{ background: var(--good); box-shadow:0 0 6px var(--good); }
 .gallery-status.pending{ background: var(--gold); box-shadow:0 0 6px var(--gold); animation: pulse 1.2s infinite; }
+.gallery-status.error{ background: var(--danger); box-shadow:0 0 6px var(--danger); }
 @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
 
 /* Trend list / cards */
