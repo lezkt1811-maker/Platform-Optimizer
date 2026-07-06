@@ -115,13 +115,20 @@
         <input type="text" id="uploadTopic" class="text-input" placeholder="e.g. Astrology">
       </div>
 
+      <div class="field-row">
+        <label class="field-label" for="uploadBatchLabel">Batch label</label>
+        <input type="text" id="uploadBatchLabel" class="text-input" placeholder="e.g. July 6 TikTok Trend Scan">
+      </div>
+
+      <p class="muted small hidden" id="selectedCountLine"></p>
+
       <div id="ocrProgress" class="ocr-progress hidden">
         <div class="ocr-bar"><div class="ocr-bar-fill" id="ocrBarFill"></div></div>
         <p class="muted" id="ocrProgressText">Reading screenshot 0 of 0…</p>
       </div>
 
       <div class="view-head view-head-tight">
-        <p class="eyebrow"><span id="galleryCount">0</span> in your library</p>
+        <p class="eyebrow"><span id="galleryCount">0</span> in your library · <span id="storageUsedInline">0 MB</span> used</p>
         <h3>Screenshot gallery</h3>
       </div>
       <div id="gallery" class="gallery"></div>
@@ -279,9 +286,22 @@
       </div>
 
       <div class="glass-card">
-        <h3 class="card-title">Data</h3>
-        <p class="muted small">Everything lives in this browser's local storage. Nothing is uploaded anywhere.</p>
-        <button class="btn btn-ghost" id="exportDataBtn">Export all data (.json)</button>
+        <h3 class="card-title">Storage health</h3>
+        <div class="stat-grid">
+          <div class="stat-card"><span class="stat-value" id="healthTotalShots">0</span><span class="stat-label">Screenshots</span></div>
+          <div class="stat-card"><span class="stat-value" id="healthUsedMb">0 MB</span><span class="stat-label">Est. storage used</span></div>
+          <div class="stat-card"><span class="stat-value" id="healthOldest">—</span><span class="stat-label">Oldest screenshot</span></div>
+        </div>
+        <p class="muted small">Images are stored in this browser's IndexedDB (built for large files); trend/library/settings data stays in localStorage. Both persist across refreshes and only live on this device.</p>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="card-title">Backup & restore</h3>
+        <p class="muted small">Export everything — including screenshot images — into one file you can restore from later or move to another browser.</p>
+        <button class="btn btn-ghost" id="exportDataBtn">Export full backup (.json)</button>
+        <label class="btn btn-ghost" for="importDataInput" style="display:inline-flex">Import backup (.json)</label>
+        <input type="file" id="importDataInput" accept=".json,application/json" hidden>
+        <p class="save-confirm hidden" id="importSaved">Restored ✦</p>
         <button class="btn btn-ghost danger" id="resetDataBtn">Erase all Oracle data</button>
       </div>
     </section>
