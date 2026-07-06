@@ -1,42 +1,319 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>StarChart13 Creator Intelligence Dashboard</title>
-<link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Trend Oracle — Post This Today</title>
+<meta name="description" content="Turn your creator analytics screenshots — from TikTok, YouTube, Instagram, and more — into today's post.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Mobile top bar -->
-  <div class="topbar">
-    <button id="hamburgerBtn" class="icon-btn" aria-label="Open menu">☰</button>
-    <div class="logo">
-      <div class="logo-badge">★</div>
-      <span class="logo-text">StarChart13</span>
-    </div>
-    <span style="width:24px"></span>
-  </div>
+<!-- Ambient starfield -->
+<div class="starfield" aria-hidden="true"></div>
 
-  <!-- Nav drawer (mobile) / sidebar (desktop) -->
-  <div id="drawerOverlay" class="drawer-overlay hidden"></div>
-  <aside id="sidebar" class="sidebar">
-    <div class="sidebar-head">
-      <div class="logo">
-        <div class="logo-badge">★</div>
-        <div>
-          <div class="logo-text">StarChart13</div>
-          <div class="logo-sub">CREATOR INTELLIGENCE</div>
+<div class="app-shell">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-glyph">✦</span>
+      <span class="brand-name">Trend Oracle</span>
+    </div>
+    <button class="icon-btn" id="settingsShortcut" title="Settings" aria-label="Open settings">⚙</button>
+  </header>
+
+  <!-- Main views -->
+  <main class="view-stack" id="viewStack">
+
+    <!-- DASHBOARD -->
+    <section class="view active" data-view="dashboard">
+      <div class="view-head">
+        <p class="eyebrow">Reading of the day</p>
+        <h1>Dashboard</h1>
+      </div>
+
+      <div class="glass-card highlight-card" id="dashOracleCard">
+        <div class="card-glow"></div>
+        <p class="eyebrow">Post This Today</p>
+        <h2 id="dashTopTrendName">No trends charted yet</h2>
+        <p class="muted" id="dashTopTrendWhy">Upload a few screenshots to let the Oracle read the sky.</p>
+        <button class="btn btn-primary" id="dashGoToPostToday">Open full reading →</button>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-value" id="statScreenshots">0</span>
+          <span class="stat-label">Screenshots</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="statTrends">0</span>
+          <span class="stat-label">Trends charted</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="statIdeas">0</span>
+          <span class="stat-label">Ideas saved</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="statPosted">0</span>
+          <span class="stat-label">Posted</span>
         </div>
       </div>
-      <button id="closeDrawerBtn" class="icon-btn close-only" aria-label="Close menu">✕</button>
-    </div>
-    <nav id="nav" class="nav"></nav>
-    <div id="quickStats" class="quick-stats"></div>
-  </aside>
 
-  <main id="app" class="app"></main>
+      <div class="view-head view-head-tight">
+        <p class="eyebrow">Rising for your niche</p>
+        <h3>Top trends right now</h3>
+      </div>
+      <div id="dashTrendList" class="trend-list"></div>
 
-  <script src="app.js"></script>
+      <div class="view-head view-head-tight">
+        <p class="eyebrow">Learning from your history</p>
+        <h3>What's working</h3>
+      </div>
+      <div class="glass-card" id="dashInsightCard">
+        <p class="muted" id="dashInsightText">Log performance on a few posted videos and the Oracle will start finding your pattern.</p>
+      </div>
+    </section>
+
+    <!-- UPLOAD -->
+    <section class="view" data-view="upload">
+      <div class="view-head">
+        <p class="eyebrow">Feed the Oracle</p>
+        <h1>Upload Screenshots</h1>
+      </div>
+
+      <label class="dropzone" id="dropzone" for="fileInput">
+        <span class="dropzone-glyph">✦</span>
+        <span class="dropzone-title">Drop screenshots here</span>
+        <span class="dropzone-sub">or tap to choose PNG, JPG, JPEG, WEBP · multiple allowed</span>
+        <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" multiple hidden>
+      </label>
+
+      <div class="field-row">
+        <label class="field-label" for="uploadPlatform">Platform</label>
+        <select id="uploadPlatform" class="select">
+          <option value="TikTok">TikTok</option>
+          <option value="YouTube">YouTube</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Facebook">Facebook</option>
+          <option value="Pinterest">Pinterest</option>
+          <option value="Google Trends">Google Trends</option>
+          <option value="Reddit">Reddit</option>
+          <option value="Website Analytics">Website Analytics</option>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label" for="uploadSourceType">Source type</label>
+        <select id="uploadSourceType" class="select"></select>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label" for="uploadTopic">Topic / niche tag (optional)</label>
+        <input type="text" id="uploadTopic" class="text-input" placeholder="e.g. Astrology">
+      </div>
+
+      <div id="ocrProgress" class="ocr-progress hidden">
+        <div class="ocr-bar"><div class="ocr-bar-fill" id="ocrBarFill"></div></div>
+        <p class="muted" id="ocrProgressText">Reading screenshot 0 of 0…</p>
+      </div>
+
+      <div class="view-head view-head-tight">
+        <p class="eyebrow"><span id="galleryCount">0</span> in your library</p>
+        <h3>Screenshot gallery</h3>
+      </div>
+      <div id="gallery" class="gallery"></div>
+    </section>
+
+    <!-- EXTRACTED TRENDS -->
+    <section class="view" data-view="trends">
+      <div class="view-head">
+        <p class="eyebrow">What the sky is showing</p>
+        <h1>Extracted Trends</h1>
+      </div>
+
+      <div class="field-row inline">
+        <input type="text" id="trendSearch" class="text-input" placeholder="Search trends, hashtags, sounds…">
+        <select id="trendPlatformFilter" class="select select-compact">
+          <option value="all">All platforms</option>
+          <option value="TikTok">TikTok</option>
+          <option value="YouTube">YouTube</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Facebook">Facebook</option>
+          <option value="Pinterest">Pinterest</option>
+          <option value="Google Trends">Google Trends</option>
+          <option value="Reddit">Reddit</option>
+          <option value="Website Analytics">Website Analytics</option>
+        </select>
+        <select id="trendSourceTypeFilter" class="select select-compact">
+          <option value="all">All source types</option>
+        </select>
+      </div>
+
+      <div id="trendsFull" class="trend-list"></div>
+      <p class="empty-state" id="trendsEmpty">No trends yet. Upload screenshots and the Oracle will read them.</p>
+    </section>
+
+    <!-- POST THIS TODAY -->
+    <section class="view" data-view="today">
+      <div class="view-head">
+        <p class="eyebrow">One reading, one action</p>
+        <h1>Post This Today</h1>
+      </div>
+
+      <div id="todayContent"></div>
+      <button class="btn btn-ghost" id="rerollToday">↻ Read a different trend</button>
+    </section>
+
+    <!-- GENERATE POST -->
+    <section class="view" data-view="generate">
+      <div class="view-head">
+        <p class="eyebrow">Turn a trend into a script</p>
+        <h1>Generate Post</h1>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label" for="generateTrendSelect">Choose a trend</label>
+        <select id="generateTrendSelect" class="select"></select>
+      </div>
+
+      <div class="ai-toggle-row">
+        <label class="switch">
+          <input type="checkbox" id="useAiToggle">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+        <span class="muted small" id="aiToggleLabel">Use AI enhancement (needs API key in Settings)</span>
+      </div>
+
+      <button class="btn btn-primary" id="generatePostBtn">Generate post ✦</button>
+
+      <div id="generatedOutput"></div>
+    </section>
+
+    <!-- CONTENT LIBRARY -->
+    <section class="view" data-view="library">
+      <div class="view-head">
+        <p class="eyebrow">Every idea you've charted</p>
+        <h1>Content Library</h1>
+      </div>
+
+      <div class="field-row inline">
+        <input type="text" id="librarySearch" class="text-input" placeholder="Search saved ideas…">
+        <select id="libraryFilter" class="select select-compact">
+          <option value="all">All statuses</option>
+          <option value="idea">Idea</option>
+          <option value="drafted">Drafted</option>
+          <option value="filmed">Filmed</option>
+          <option value="posted">Posted</option>
+          <option value="performed well">Performed well</option>
+          <option value="flopped">Flopped</option>
+        </select>
+      </div>
+
+      <div id="libraryList" class="library-list"></div>
+      <p class="empty-state" id="libraryEmpty">Nothing saved yet. Generate a post to add your first idea.</p>
+    </section>
+
+    <!-- PERFORMANCE TRACKER -->
+    <section class="view" data-view="performance">
+      <div class="view-head">
+        <p class="eyebrow">Tell the Oracle what happened</p>
+        <h1>Performance Tracker</h1>
+      </div>
+
+      <div class="field-row">
+        <label class="field-label" for="perfPostSelect">Which post?</label>
+        <select id="perfPostSelect" class="select"></select>
+      </div>
+
+      <div class="metric-grid" id="perfForm">
+        <div class="metric-input"><label>Views</label><input type="number" min="0" id="perfViews"></div>
+        <div class="metric-input"><label>Likes</label><input type="number" min="0" id="perfLikes"></div>
+        <div class="metric-input"><label>Comments</label><input type="number" min="0" id="perfComments"></div>
+        <div class="metric-input"><label>Shares</label><input type="number" min="0" id="perfShares"></div>
+        <div class="metric-input"><label>Saves</label><input type="number" min="0" id="perfSaves"></div>
+        <div class="metric-input"><label>Follows gained</label><input type="number" min="0" id="perfFollows"></div>
+        <div class="metric-input"><label>StarChart13 clicks</label><input type="number" min="0" id="perfClicks"></div>
+      </div>
+      <button class="btn btn-primary" id="savePerfBtn">Save performance</button>
+
+      <div class="view-head view-head-tight">
+        <p class="eyebrow">Pattern recognition</p>
+        <h3>Performance history</h3>
+      </div>
+      <div id="perfHistory" class="library-list"></div>
+      <p class="empty-state" id="perfEmpty">No performance logged yet.</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" data-view="settings">
+      <div class="view-head">
+        <p class="eyebrow">Your brand, your rules</p>
+        <h1>Settings</h1>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="card-title">Niche & brand keywords</h3>
+        <p class="muted small">One per line. These drive relevance scoring and post generation.</p>
+        <textarea id="nicheKeywords" class="textarea" rows="10"></textarea>
+        <div class="field-row">
+          <label class="field-label" for="brandWebsite">Website for calls to action</label>
+          <input type="text" id="brandWebsite" class="text-input" placeholder="StarChart13.com">
+        </div>
+        <button class="btn btn-primary" id="saveNicheBtn">Save niche</button>
+        <p class="save-confirm hidden" id="nicheSaved">Saved ✦</p>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="card-title">AI enhancement (optional)</h3>
+        <p class="muted small">The Oracle works fully offline using local keyword analysis. Add an Anthropic API key here only if you want AI-enhanced scripts and captions. Your key is stored only in this browser's local storage — never sent anywhere but api.anthropic.com.</p>
+        <div class="field-row">
+          <label class="field-label" for="apiKeyInput">Anthropic API key</label>
+          <input type="password" id="apiKeyInput" class="text-input" placeholder="sk-ant-…">
+        </div>
+        <button class="btn btn-secondary" id="saveApiKeyBtn">Save key</button>
+        <button class="btn btn-ghost" id="clearApiKeyBtn">Remove key</button>
+        <p class="save-confirm hidden" id="apiKeySaved">Saved ✦</p>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="card-title">Data</h3>
+        <p class="muted small">Everything lives in this browser's local storage. Nothing is uploaded anywhere.</p>
+        <button class="btn btn-ghost" id="exportDataBtn">Export all data (.json)</button>
+        <button class="btn btn-ghost danger" id="resetDataBtn">Erase all Oracle data</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom navigation -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-item active" data-view="dashboard"><span class="nav-glyph">◆</span><span>Dashboard</span></button>
+    <button class="nav-item" data-view="upload"><span class="nav-glyph">⇧</span><span>Upload</span></button>
+    <button class="nav-item" data-view="trends"><span class="nav-glyph">✧</span><span>Trends</span></button>
+    <button class="nav-item" data-view="today"><span class="nav-glyph">☾</span><span>Today</span></button>
+    <button class="nav-item" data-view="generate"><span class="nav-glyph">✎</span><span>Generate</span></button>
+    <button class="nav-item" data-view="library"><span class="nav-glyph">▤</span><span>Library</span></button>
+    <button class="nav-item" data-view="performance"><span class="nav-glyph">◈</span><span>Stats</span></button>
+    <button class="nav-item" data-view="settings"><span class="nav-glyph">⚙</span><span>Settings</span></button>
+  </nav>
+</div>
+
+<!-- Trend detail modal -->
+<div class="modal-overlay hidden" id="trendModal">
+  <div class="modal glass-card" id="trendModalContent"></div>
+</div>
+
+<!-- Library item detail modal -->
+<div class="modal-overlay hidden" id="libraryModal">
+  <div class="modal glass-card" id="libraryModalContent"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/tesseract.js@v5.1.1/dist/tesseract.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
