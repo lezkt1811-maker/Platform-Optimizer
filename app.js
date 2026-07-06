@@ -279,6 +279,75 @@ function computeScores(entry, allTrends) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* IndexedDB — screenshot images live here, not localStorage.             */
+/* localStorage chokes and silently fails once you're storing 20+ full-res*/
+/* screenshots a day as base64; IndexedDB is built for exactly this. Only */
+/* lightweight metadata (name, platform, tags, OCR status) stays in       */
+/* localStorage so the rest of the app can keep reading it synchronously. */
+/* ---------------------------------------------------------------------- */
+const IDB_NAME = 'TrendOracleDB';
+const IDB_VERSION = 1;
+const IDB_STORE = 'screenshotImages';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('IndexedDB not available in this browser')); return; }
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(record) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(record);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(id) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbDelete(id) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(id);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGetAll() {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbClear() {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).clear();
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
 /* Screenshot upload + OCR                                                */
 /* ---------------------------------------------------------------------- */
 function fileToDataURL(file) {
@@ -290,6 +359,20 @@ function fileToDataURL(file) {
   });
 }
 
+function defaultBatchLabel(platform) {
+  const d = new Date();
+  const month = d.toLocaleString('default', { month: 'long' });
+  return `${month} ${d.getDate()} ${platform} Trend Scan`;
+}
+
+function updateScreenshotMeta(id, patch) {
+  saveScreenshots(getScreenshots().map(s => s.id === id ? { ...s, ...patch } : s));
+}
+
+/* Processes one screenshot at a time — save to IndexedDB, then OCR, then
+   trend extraction — so a 20+ image batch doesn't try to hold everything
+   in memory at once and crash a phone browser. One failure just gets
+   skipped; the rest of the batch keeps going. */
 async function handleFiles(fileList) {
   const files = Array.from(fileList).filter(f => /image\/(png|jpeg|jpg|webp)/.test(f.type));
   if (!files.length) { toast('Please choose PNG, JPG, JPEG, or WEBP images.'); return; }
@@ -298,71 +381,95 @@ async function handleFiles(fileList) {
   const sourceType = $('#uploadSourceType').value;
   const topic = $('#uploadTopic').value.trim();
   const batchId = uid();
-  const screenshots = getScreenshots();
-  const newOnes = [];
+  const batchLabel = $('#uploadBatchLabel').value.trim() || defaultBatchLabel(platform);
+  $('#uploadBatchLabel').value = batchLabel;
 
-  for (const file of files) {
-    const dataUrl = await fileToDataURL(file);
-    const shot = {
-      id: uid(),
-      name: file.name,
-      dataUrl,
-      platform,
-      sourceType,
-      topic,
-      batchId,
-      dateAdded: new Date().toISOString(),
-      ocrText: '',
-      ocrStatus: 'pending'
-    };
-    newOnes.push(shot);
-  }
-  saveScreenshots([...newOnes, ...screenshots]);
-  renderGallery();
-  renderDashboardStats();
+  const countLine = $('#selectedCountLine');
+  countLine.classList.remove('hidden');
+  countLine.textContent = `${files.length} screenshot${files.length === 1 ? '' : 's'} selected — saving…`;
 
   const progressWrap = $('#ocrProgress');
   progressWrap.classList.remove('hidden');
-  for (let i = 0; i < newOnes.length; i++) {
-    $('#ocrProgressText').textContent = `Reading screenshot ${i + 1} of ${newOnes.length}…`;
-    await runOCR(newOnes[i].id, (pct) => {
-      $('#ocrBarFill').style.width = Math.round(((i + pct) / newOnes.length) * 100) + '%';
-    });
+  $('#ocrBarFill').style.width = '0%';
+
+  const trendsBefore = getTrends().length;
+  let savedCount = 0;
+  let skippedCount = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      $('#ocrProgressText').textContent = `Saving screenshot ${i + 1} of ${files.length}…`;
+      const dataUrl = await fileToDataURL(file);
+      const id = uid();
+      await idbPut({ id, dataUrl, ocrText: '' });
+
+      const meta = {
+        id, name: file.name, platform, sourceType, topic, batchId, batchLabel,
+        dateAdded: new Date().toISOString(), ocrStatus: 'pending', ocrTextSummary: ''
+      };
+      saveScreenshots([meta, ...getScreenshots()]);
+      savedCount++;
+      renderGallery();
+      renderDashboardStats();
+
+      $('#ocrProgressText').textContent = `Reading text — screenshot ${i + 1} of ${files.length}…`;
+      await runOCR(id, (pct) => {
+        $('#ocrBarFill').style.width = Math.round(((i + pct) / files.length) * 100) + '%';
+      });
+    } catch (err) {
+      console.error('Batch item failed, skipping', err);
+      skippedCount++;
+    }
   }
+
   progressWrap.classList.add('hidden');
   $('#ocrBarFill').style.width = '0%';
-  toast('Screenshots read and trends charted ✦');
+  countLine.classList.add('hidden');
+
+  const extracted = getTrends().length - trendsBefore;
+  toast(`${savedCount} screenshot${savedCount === 1 ? '' : 's'} saved, ${extracted} trend${extracted === 1 ? '' : 's'} extracted${skippedCount ? ` (${skippedCount} skipped)` : ''} ✦`);
+
   renderGallery();
   renderTrends();
   renderDashboard();
   populateGenerateSelect();
+  renderStorageHealth();
 }
 
 async function runOCR(screenshotId, onProgress) {
-  const screenshots = getScreenshots();
-  const shot = screenshots.find(s => s.id === screenshotId);
-  if (!shot) return;
+  let dataUrl;
   try {
-    const result = await Tesseract.recognize(shot.dataUrl, 'eng', {
-      logger: (m) => {
-        if (m.status === 'recognizing text' && onProgress) onProgress(m.progress);
-      }
-    });
-    shot.ocrText = result.data.text || '';
-    shot.ocrStatus = 'done';
+    const record = await idbGet(screenshotId);
+    if (!record) return;
+    dataUrl = record.dataUrl;
   } catch (err) {
-    console.error('OCR failed', err);
-    shot.ocrText = '';
-    shot.ocrStatus = 'error';
+    console.error('Could not read screenshot image from IndexedDB', err);
+    updateScreenshotMeta(screenshotId, { ocrStatus: 'error' });
+    return;
   }
-  const list = getScreenshots().map(s => s.id === shot.id ? shot : s);
-  saveScreenshots(list);
-  analyzeScreenshot(shot);
+
+  let text = '';
+  let status = 'done';
+  try {
+    const result = await Tesseract.recognize(dataUrl, 'eng', {
+      logger: (m) => { if (m.status === 'recognizing text' && onProgress) onProgress(m.progress); }
+    });
+    text = result.data.text || '';
+  } catch (err) {
+    console.error('OCR failed on this screenshot — skipping it, continuing batch', err);
+    status = 'error';
+  }
+
+  try { await idbPut({ id: screenshotId, dataUrl, ocrText: text }); } catch (e) { console.error(e); }
+  updateScreenshotMeta(screenshotId, { ocrStatus: status, ocrTextSummary: text.slice(0, 160) });
+
+  if (text.trim()) analyzeScreenshot(screenshotId, text);
 }
 
-function analyzeScreenshot(shot) {
-  if (!shot.ocrText || !shot.ocrText.trim()) return;
-  const text = shot.ocrText;
+function analyzeScreenshot(screenshotId, text) {
+  const shot = getScreenshots().find(s => s.id === screenshotId);
+  if (!shot || !text || !text.trim()) return;
   const hashtags = extractHashtags(text);
   const metrics = extractMetrics(text);
   const keywords = topKeywords(text, 8);
@@ -381,6 +488,7 @@ function analyzeScreenshot(shot) {
     platform: shot.platform || 'TikTok',
     sourceType: shot.sourceType || 'Other',
     topic: shot.topic || '',
+    batchLabel: shot.batchLabel || '',
     dateAdded: new Date().toISOString(),
     extractedKeywords: keywords,
     hashtags,
@@ -415,18 +523,49 @@ function renderGallery() {
   }
   gallery.innerHTML = shots.map(s => `
     <div class="gallery-item" data-id="${s.id}">
-      <span class="gallery-status ${s.ocrStatus === 'done' ? 'done' : 'pending'}"></span>
-      <img src="${s.dataUrl}" alt="${esc(s.name)}">
+      <span class="gallery-status ${s.ocrStatus === 'done' ? 'done' : s.ocrStatus === 'error' ? 'error' : 'pending'}"></span>
+      <img data-img-id="${s.id}" alt="${esc(s.name)}">
       <span class="gallery-tag">${esc(s.platform)} · ${esc(s.sourceType)}</span>
       <button class="gallery-delete" data-id="${s.id}" aria-label="Delete screenshot">✕</button>
     </div>
   `).join('');
+
+  // Images load from IndexedDB asynchronously after the skeleton paints,
+  // so the gallery count and layout appear instantly even for big batches.
+  shots.forEach(async (s) => {
+    try {
+      const record = await idbGet(s.id);
+      const imgEl = gallery.querySelector(`img[data-img-id="${s.id}"]`);
+      if (imgEl && record && record.dataUrl) imgEl.src = record.dataUrl;
+    } catch (e) { /* image missing from IndexedDB — leave blank */ }
+  });
 }
 
-function deleteScreenshot(id) {
+async function deleteScreenshot(id) {
   saveScreenshots(getScreenshots().filter(s => s.id !== id));
+  try { await idbDelete(id); } catch (e) { console.error('Could not delete image from IndexedDB', e); }
   renderGallery();
   renderDashboardStats();
+  renderStorageHealth();
+}
+
+async function renderStorageHealth() {
+  const shots = getScreenshots();
+  const totalEl = $('#healthTotalShots');
+  const usedEl = $('#healthUsedMb');
+  const oldestEl = $('#healthOldest');
+  const inlineEl = $('#storageUsedInline');
+  if (totalEl) totalEl.textContent = shots.length;
+  const oldest = shots.length ? new Date(Math.min(...shots.map(s => new Date(s.dateAdded).getTime()))).toLocaleDateString() : '—';
+  if (oldestEl) oldestEl.textContent = oldest;
+  let usedMb = '0.0 MB';
+  try {
+    const records = await idbGetAll();
+    const bytes = records.reduce((sum, r) => sum + (r.dataUrl ? r.dataUrl.length * 0.75 : 0), 0);
+    usedMb = (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  } catch (e) { /* IndexedDB unavailable — leave default */ }
+  if (usedEl) usedEl.textContent = usedMb;
+  if (inlineEl) inlineEl.textContent = usedMb;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -816,6 +955,12 @@ If the platform doesn't use hashtags (e.g. Reddit), return an empty string for "
   const text = (data.content || []).map(b => b.text || '').join('\n');
   const clean = text.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
+}
+
+function populateUploadSourceTypes() {
+  const platform = $('#uploadPlatform').value;
+  const sel = $('#uploadSourceType');
+  sel.innerHTML = sourceTypesFor(platform).map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
 }
 
 function populateGenerateSelect() {
@@ -1275,26 +1420,60 @@ function clearApiKey() {
   toast('API key removed');
 }
 
-function exportData() {
+async function exportData() {
+  let images = [];
+  try { images = await idbGetAll(); } catch (e) { console.error('Could not read images for export', e); }
   const payload = {
+    exportedAt: new Date().toISOString(),
     screenshots: getScreenshots(),
+    screenshotImages: images,
     trends: getTrends(),
     library: getLibrary(),
     performance: getPerformance(),
     settings: getSettings()
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'trend-oracle-export.json';
+  a.download = `trend-oracle-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  toast('Backup exported ✦');
 }
 
-function resetData() {
+async function importDataFromFile(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if (!confirm('This replaces all current Trend Oracle data on this device with the contents of the backup. Continue?')) return;
+
+    saveScreenshots(payload.screenshots || []);
+    saveTrends(payload.trends || []);
+    saveLibrary(payload.library || []);
+    savePerformance(payload.performance || []);
+    saveSettings(payload.settings || getSettings());
+
+    try { await idbClear(); } catch (e) { console.error(e); }
+    for (const rec of (payload.screenshotImages || [])) {
+      try { await idbPut(rec); } catch (e) { console.error('Could not restore one image', e); }
+    }
+
+    $('#importSaved').classList.remove('hidden');
+    setTimeout(() => $('#importSaved').classList.add('hidden'), 2500);
+    toast('Backup restored ✦');
+    renderEverything();
+  } catch (err) {
+    console.error('Import failed', err);
+    toast('Could not read that backup file');
+  }
+}
+
+async function resetData() {
   if (!confirm('This erases all screenshots, trends, saved ideas, and performance data from this browser. Continue?')) return;
   Object.values(LS).forEach(k => localStorage.removeItem(k));
+  try { await idbClear(); } catch (e) { console.error(e); }
   toast('All data erased');
   renderEverything();
 }
@@ -1311,8 +1490,9 @@ function showView(name) {
   if (name === 'library') renderLibrary();
   if (name === 'performance') { populatePerfSelect(); renderPerfHistory(); }
   if (name === 'generate') populateGenerateSelect();
-  if (name === 'settings') loadSettingsIntoForm();
+  if (name === 'settings') { loadSettingsIntoForm(); renderStorageHealth(); }
   if (name === 'dashboard') renderDashboard();
+  if (name === 'upload') { renderGallery(); renderStorageHealth(); }
 }
 
 function renderEverything() {
@@ -1324,6 +1504,7 @@ function renderEverything() {
   populatePerfSelect();
   renderPerfHistory();
   loadSettingsIntoForm();
+  renderStorageHealth();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1346,6 +1527,13 @@ function init() {
     handleFiles(e.dataTransfer.files);
   });
 
+  populateUploadSourceTypes();
+  $('#uploadBatchLabel').value = defaultBatchLabel($('#uploadPlatform').value);
+  $('#uploadPlatform').addEventListener('change', () => {
+    populateUploadSourceTypes();
+    $('#uploadBatchLabel').value = defaultBatchLabel($('#uploadPlatform').value);
+  });
+
   document.addEventListener('click', (e) => {
     if (e.target.matches('.gallery-delete')) deleteScreenshot(e.target.dataset.id);
     const item = e.target.closest('.gallery-item');
@@ -1354,9 +1542,12 @@ function init() {
     }
   });
 
-  // Trends
+  // Trends — was pointing at a non-existent #trendFilter, which threw and
+  // silently skipped every listener registered after it (Generate, Library,
+  // Performance, Settings, and the initial render). Fixed to the real IDs.
   $('#trendSearch').addEventListener('input', renderTrends);
-  $('#trendFilter').addEventListener('change', renderTrends);
+  $('#trendPlatformFilter').addEventListener('change', renderTrends);
+  $('#trendSourceTypeFilter').addEventListener('change', renderTrends);
 
   // Today
   $('#rerollToday').addEventListener('click', () => { pickTodayTrend(true); renderToday(); });
@@ -1376,6 +1567,10 @@ function init() {
   $('#saveApiKeyBtn').addEventListener('click', saveApiKey);
   $('#clearApiKeyBtn').addEventListener('click', clearApiKey);
   $('#exportDataBtn').addEventListener('click', exportData);
+  $('#importDataInput').addEventListener('change', (e) => {
+    importDataFromFile(e.target.files[0]);
+    e.target.value = '';
+  });
   $('#resetDataBtn').addEventListener('click', resetData);
 
   // Modals
