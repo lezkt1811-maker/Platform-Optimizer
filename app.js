@@ -1552,8 +1552,10 @@ const ONBOARDING_STEPS = [
 let onboardingIndex = 0;
 
 function renderOnboardingStep() {
+  const body = $('#onboardingBody');
+  if (!body) return;
   const step = ONBOARDING_STEPS[onboardingIndex];
-  $('#onboardingBody').innerHTML = `
+  body.innerHTML = `
     <p class="onboarding-step-eyebrow">${esc(step.eyebrow)}</p>
     <h2 class="onboarding-step-title">${esc(step.title)}</h2>
     <p class="onboarding-step-body">${step.body}</p>
@@ -1561,17 +1563,20 @@ function renderOnboardingStep() {
   $('#onboardingDots').innerHTML = ONBOARDING_STEPS
     .map((_, i) => `<span class="onboarding-dot${i === onboardingIndex ? ' active' : ''}"></span>`)
     .join('');
-  $('#onboardingBack').classList.toggle('hidden', onboardingIndex === 0);
-  $('#onboardingNext').textContent = onboardingIndex === ONBOARDING_STEPS.length - 1 ? 'Got it ✦' : 'Next →';
+  $('#onboardingBack')?.classList.toggle('hidden', onboardingIndex === 0);
+  const nextBtn = $('#onboardingNext');
+  if (nextBtn) nextBtn.textContent = onboardingIndex === ONBOARDING_STEPS.length - 1 ? 'Got it ✦' : 'Next →';
 }
 
 function openOnboarding(startAt = 0) {
+  const modal = $('#onboardingModal');
+  if (!modal) return;
   onboardingIndex = startAt;
   renderOnboardingStep();
-  $('#onboardingModal').classList.remove('hidden');
+  modal.classList.remove('hidden');
 }
 function closeOnboarding() {
-  $('#onboardingModal').classList.add('hidden');
+  $('#onboardingModal')?.classList.add('hidden');
   localStorage.setItem(LS.onboardingSeen, '1');
 }
 
@@ -1593,6 +1598,7 @@ function computeChecklist() {
 
 function renderGettingStarted() {
   const card = $('#gettingStartedCard');
+  if (!card) return;
   if (localStorage.getItem(LS.checklistDismissed) === '1') {
     card.classList.add('hidden');
     return;
@@ -1654,22 +1660,25 @@ function init() {
   $('#settingsShortcut').addEventListener('click', () => showView('settings'));
   $('#dashGoToPostToday').addEventListener('click', () => showView('today'));
 
-  // Guided onboarding
-  $('#helpShortcut').addEventListener('click', () => openOnboarding(0));
-  $('#closeOnboarding').addEventListener('click', closeOnboarding);
-  $('#onboardingModal').addEventListener('click', (e) => { if (e.target === $('#onboardingModal')) closeOnboarding(); });
-  $('#onboardingBack').addEventListener('click', () => {
+  // Guided onboarding — guarded with `?.` so that if these elements are ever
+  // missing (e.g. an old index.html paired with a newer app.js), a missing
+  // onboarding button can't throw and silently cancel every listener wired
+  // after it, which used to break Upload/Generate/Library/Settings entirely.
+  $('#helpShortcut')?.addEventListener('click', () => openOnboarding(0));
+  $('#closeOnboarding')?.addEventListener('click', closeOnboarding);
+  $('#onboardingModal')?.addEventListener('click', (e) => { if (e.target === $('#onboardingModal')) closeOnboarding(); });
+  $('#onboardingBack')?.addEventListener('click', () => {
     if (onboardingIndex > 0) { onboardingIndex--; renderOnboardingStep(); }
   });
-  $('#onboardingNext').addEventListener('click', () => {
+  $('#onboardingNext')?.addEventListener('click', () => {
     if (onboardingIndex < ONBOARDING_STEPS.length - 1) { onboardingIndex++; renderOnboardingStep(); }
     else closeOnboarding();
   });
 
   // Getting started checklist
-  $('#dismissChecklist').addEventListener('click', () => {
+  $('#dismissChecklist')?.addEventListener('click', () => {
     localStorage.setItem(LS.checklistDismissed, '1');
-    $('#gettingStartedCard').classList.add('hidden');
+    $('#gettingStartedCard')?.classList.add('hidden');
   });
 
   // Upload
