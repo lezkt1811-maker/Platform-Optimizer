@@ -30,7 +30,9 @@ const LS = {
   library:     'trendOracle_library',
   performance: 'trendOracle_performance',
   settings:    'trendOracle_settings',
-  todayPick:   'trendOracle_todayPick'
+  todayPick:   'trendOracle_todayPick',
+  onboardingSeen:      'trendOracle_onboardingSeen',
+  checklistDismissed:  'trendOracle_checklistDismissed'
 };
 
 function loadJSON(key, fallback) {
@@ -231,6 +233,24 @@ function classifyCategory(text, sourceType) {
   return 'General Topic';
 }
 
+/* TikTok's Creator Search Insights surfaces "opportunity" in two distinct
+   ways: a "Content gap" tab/filter (high search demand, not enough content
+   answering it yet) and a per-term "Great for a first post" label (low
+   competition, good entry point). Either one showing up in the OCR text
+   means this trend is worth prioritizing over a same-scoring trend that
+   doesn't have that label — so it's tracked as its own signal rather than
+   folded anonymously into keyword scoring. */
+function detectContentGap(text) {
+  const lower = text.toLowerCase();
+  if (/content gap/.test(lower)) {
+    return { flagged: true, reason: 'TikTok flagged this under "Content gap" — high search demand with not enough existing content answering it.' };
+  }
+  if (/great for a first post/.test(lower)) {
+    return { flagged: true, reason: 'TikTok labeled this "Great for a first post" — an opportunity term with low competition.' };
+  }
+  return { flagged: false, reason: null };
+}
+
 /* ---------------------------------------------------------------------- */
 /* Scoring                                                                */
 /* ---------------------------------------------------------------------- */
@@ -250,11 +270,12 @@ function computeScores(entry, allTrends) {
 
   const metricCount = Object.keys(entry.metrics || {}).length;
   const recencyBoost = 10; // freshly extracted trends get a small lift
+  const contentGapBoost = entry.contentGapSignal ? 22 : 0;
 
   const isSearchSource = /search/i.test(entry.sourceType || '');
   const isTrendingSource = /trending|hashtag|sound|reel audio/i.test(entry.sourceType || '');
   const audienceMatch = clamp(niche * 18 + (isSearchSource ? 10 : 0) + 20);
-  const trendStrength = clamp(metricCount * 14 + recencyBoost + (isTrendingSource ? 15 : 0) + Math.min(sameNameCount, 3) * 8);
+  const trendStrength = clamp(metricCount * 14 + recencyBoost + (isTrendingSource ? 15 : 0) + Math.min(sameNameCount, 3) * 8 + contentGapBoost);
   const hookStrength = clamp(emotional * 12 + controversy * 8 + hasQuestion * 12 + 15);
   const websiteConversion = clamp(websiteMentions * 20 + niche * 8 + 10);
   const clarity = clamp(100 - Math.abs(40 - Math.min(text.length, 80)) , 30, 100);
@@ -480,6 +501,7 @@ function analyzeScreenshot(screenshotId, text) {
   const theme = signal === 'unclear' ? null : inferTheme(text);
 
   const trends = getTrends();
+  const contentGap = detectContentGap(text);
   const entry = {
     id: uid(),
     trendName,
@@ -499,7 +521,9 @@ function analyzeScreenshot(screenshotId, text) {
     needsContext: signal !== 'clear',
     signal,
     notes: '',
-    rawText: text.slice(0, 800)
+    rawText: text.slice(0, 800),
+    contentGapSignal: contentGap.flagged,
+    contentGapReason: contentGap.reason
   };
   const scores = computeScores(entry, trends);
   entry.scores = scores;
@@ -612,7 +636,8 @@ function scorePill(value) {
 /* Rendering: Trend list / cards                                         */
 /* ---------------------------------------------------------------------- */
 function trendCardHTML(t) {
-  const tags = [...t.hashtags.slice(0, 3).map(h => `<span class="tag">${esc(h)}</span>`),
+  const tags = [t.contentGapSignal ? `<span class="tag good">⚡ Content Gap</span>` : '',
+    ...t.hashtags.slice(0, 3).map(h => `<span class="tag">${esc(h)}</span>`),
     `<span class="tag gold">${esc(t.topicCategory)}</span>`,
     `<span class="tag purple">${esc(t.platform)} · ${esc(t.sourceType)}</span>`,
     t.theme ? `<span class="tag">${esc(t.theme)}</span>` : ''].join('');
@@ -700,6 +725,9 @@ function openTrendDetail(id) {
     <p class="eyebrow">${esc(t.topicCategory)} · ${esc(t.platform)} · ${esc(t.sourceType)}</p>
     <h2>${esc(t.trendName)}</h2>
     <p class="muted small">Charted ${new Date(t.dateAdded).toLocaleString()} from ${esc(t.sourceScreenshot)}</p>
+    ${t.contentGapSignal ? `<div class="post-block" style="border-color: rgba(75,227,160,.35)">
+       <div class="post-block-label" style="color:var(--good)">⚡ Content gap opportunity</div>
+       <div class="post-block-body">${esc(t.contentGapReason)}</div></div>` : ''}
     ${t.needsContext
       ? `<div class="warning-banner">⚠ Not enough signal to know what this trend actually means — the extracted text was mostly numbers or app UI text (view counts, "TikTok," etc.), not a real topic. Add a note below describing what this screenshot was actually about, and the Oracle will re-read it instead of guessing.</div>`
       : t.theme
@@ -768,22 +796,27 @@ function seedFromString(str) {
 const HASHTAG_POOL = ['#astrology', '#ophiuchus', '#13thsign', '#truesky', '#astrologytok',
   '#zodiactruth', '#lilith', '#spiritualawakening', '#hiddenknowledge', '#astrologyeducation'];
 
-function buildHashtags(trend, count = 6) {
-  const extraTags = trend.hashtags.slice(0, 3).map(h => h.replace('#', ''));
-  return [...new Set([...HASHTAG_POOL.slice(0, count), ...extraTags.map(t => '#' + t)])].slice(0, 8).join(' ');
+/* maxTotal caps the final hashtag count for platforms with a hard limit
+   (TikTok's UI realistically fits ~5 before captions get cut off/spammy-
+   looking, even though the platform technically allows more). Real
+   hashtags pulled from the source screenshot are prioritized over the
+   generic niche pool, since they're proven to already be in use. */
+function buildHashtags(trend, maxTotal = 8) {
+  const extraTags = trend.hashtags.slice(0, 3).map(h => '#' + h.replace('#', ''));
+  return [...new Set([...extraTags, ...HASHTAG_POOL])].slice(0, maxTotal).join(' ');
 }
 
 /* Short-form video platforms (TikTok, YouTube Shorts, Instagram Reels,
    Facebook Reels) all use the same hook → myth → reveal → CTA script shape.
    TikTok is the original/reference module; other video platforms reuse it
    with platform-appropriate labels and CTA phrasing. */
-function buildVideoPost(trend, hook, website, platformLabel) {
+function buildVideoPost(trend, hook, website, platformLabel, hashtagLimit = 8) {
   const title = `${trend.trendName} — the true sky version nobody explains`;
   const setup = trend.theme
     ? `Set up why this resonates: ${trend.themeDriver}.`
     : `Set up the myth: what most people believe about ${trend.trendName.toLowerCase()}.`;
   const caption = `${title}\n\nMost horoscopes are working off a chart that's centuries out of date. Here's what the true sky actually shows about ${trend.trendName.toLowerCase()}, and why 13-sign astrology changes the read. Full birth chart breakdowns at ${website}.`;
-  const hashtags = buildHashtags(trend);
+  const hashtags = buildHashtags(trend, hashtagLimit);
 
   const script30 =
 `[0-2s] HOOK (on screen + spoken): "${hook}"
@@ -853,7 +886,7 @@ function generateLocalPost(trend) {
 
   switch (platform) {
     case 'TikTok':
-      return buildVideoPost(trend, hook, website, 'TikTok caption');
+      return buildVideoPost(trend, hook, website, 'TikTok caption', 5);
     case 'YouTube':
       return buildVideoPost(trend, hook, website, 'YouTube description');
     case 'Instagram':
@@ -933,7 +966,7 @@ Otherwise return JSON with "insufficientContext": false and a full post package 
 
 Respond with strict JSON only (no markdown, no preamble), using exactly these keys:
 {"insufficientContext": false, "clarifyingQuestion": "", "title": "", "hook": "", "caption": "", "hashtags": "", "script30": "", "script60": "", "pinnedComment": "", "thumbnailText": "", "cta": ""}
-If the platform doesn't use hashtags (e.g. Reddit), return an empty string for "hashtags". Caption format: title first, then description, then hashtags directly underneath if applicable, no extra labels. CTA must reference ${website}.`;
+If the platform doesn't use hashtags (e.g. Reddit), return an empty string for "hashtags". ${platform === 'TikTok' ? 'This creator can only fit 5 hashtags on TikTok — return at most 5, no more, prioritizing the most relevant ones.' : ''} Caption format: title first, then description, then hashtags directly underneath if applicable, no extra labels. CTA must reference ${website}.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1168,6 +1201,7 @@ function renderToday() {
 
 function whyThisTrend(t) {
   const reasons = [];
+  if (t.contentGapSignal) reasons.push('TikTok itself flagged it as a content-gap opportunity — high demand, not enough content answering it yet');
   if (t.theme) reasons.push(`it taps into "${t.theme.toLowerCase()}" — ${t.themeDriver}`);
   if (t.scores.audienceMatch > 55) reasons.push('it lines up closely with your 13-sign / true sky niche');
   if (t.scores.hookStrength > 55) reasons.push('the language carries a strong curiosity or emotional hook');
@@ -1384,6 +1418,8 @@ function renderDashboard() {
 
   const insight = computeInsight();
   $('#dashInsightText').textContent = insight || "Log performance on a few posted videos and the Oracle will start finding your pattern.";
+
+  renderGettingStarted();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1479,6 +1515,108 @@ async function resetData() {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Guided onboarding                                                      */
+/* ---------------------------------------------------------------------- */
+const ONBOARDING_STEPS = [
+  {
+    eyebrow: 'Welcome',
+    title: 'How Trend Oracle works',
+    body: 'This app turns screenshots of what\'s trending — on TikTok, YouTube, wherever — into one clear thing to post today. It works in four steps. Here\'s the quick version.'
+  },
+  {
+    eyebrow: 'Step 1 of 4',
+    title: 'Upload screenshots',
+    body: 'Go to <strong>Upload</strong> and drop in screenshots of trending sounds, hashtags, search results, or analytics. The Oracle reads the text in each image and pulls out topics automatically — you don\'t need to type anything in.'
+  },
+  {
+    eyebrow: 'Step 2 of 4',
+    title: 'Check Today',
+    body: 'Every trend the Oracle finds gets scored. The <strong>Today</strong> tab always shows your single highest-scoring trend right now, plus a plain-English reason why — so you never have to guess what to post about.'
+  },
+  {
+    eyebrow: 'Step 3 of 4',
+    title: 'Generate a post',
+    body: 'Pick a trend in <strong>Generate</strong> and get a ready-to-use script and caption. This works fully offline by default. Flip on "Use AI enhancement" here only if you\'ve added an Anthropic API key in Settings — that gives you sharper, more natural wording.'
+  },
+  {
+    eyebrow: 'Step 4 of 4',
+    title: 'Save it, post it, track it',
+    body: 'Save a generated post to your <strong>Library</strong> to keep it as an idea, or come back to <strong>Stats</strong> after you\'ve posted to log how it did. The Oracle uses that history to get better at picking your next trend.'
+  },
+  {
+    eyebrow: 'You\'re set',
+    title: 'That\'s the whole loop',
+    body: 'Upload → Today → Generate → Track. Nothing here ever leaves your browser except the optional AI request, which goes straight to Anthropic. Tap the <strong>?</strong> in the top bar any time you want to see this again.'
+  }
+];
+let onboardingIndex = 0;
+
+function renderOnboardingStep() {
+  const step = ONBOARDING_STEPS[onboardingIndex];
+  $('#onboardingBody').innerHTML = `
+    <p class="onboarding-step-eyebrow">${esc(step.eyebrow)}</p>
+    <h2 class="onboarding-step-title">${esc(step.title)}</h2>
+    <p class="onboarding-step-body">${step.body}</p>
+  `;
+  $('#onboardingDots').innerHTML = ONBOARDING_STEPS
+    .map((_, i) => `<span class="onboarding-dot${i === onboardingIndex ? ' active' : ''}"></span>`)
+    .join('');
+  $('#onboardingBack').classList.toggle('hidden', onboardingIndex === 0);
+  $('#onboardingNext').textContent = onboardingIndex === ONBOARDING_STEPS.length - 1 ? 'Got it ✦' : 'Next →';
+}
+
+function openOnboarding(startAt = 0) {
+  onboardingIndex = startAt;
+  renderOnboardingStep();
+  $('#onboardingModal').classList.remove('hidden');
+}
+function closeOnboarding() {
+  $('#onboardingModal').classList.add('hidden');
+  localStorage.setItem(LS.onboardingSeen, '1');
+}
+
+/* ---------------------------------------------------------------------- */
+/* Getting started checklist                                             */
+/* ---------------------------------------------------------------------- */
+function computeChecklist() {
+  const uploaded = getScreenshots().length > 0;
+  const charted = getTrends().length > 0;
+  const generated = getLibrary().length > 0;
+  const tracked = getPerformance().length > 0;
+  return [
+    { done: uploaded, view: 'upload', title: 'Upload your first screenshot', sub: 'A trending page, search result, or analytics shot' },
+    { done: charted, view: 'trends', title: 'See a trend get charted', sub: 'The Oracle reads it and scores it automatically' },
+    { done: generated, view: 'generate', title: 'Generate and save a post idea', sub: 'Turn a trend into a script and caption' },
+    { done: tracked, view: 'performance', title: 'Log how a post performed', sub: 'Helps the Oracle learn your pattern' }
+  ];
+}
+
+function renderGettingStarted() {
+  const card = $('#gettingStartedCard');
+  if (localStorage.getItem(LS.checklistDismissed) === '1') {
+    card.classList.add('hidden');
+    return;
+  }
+  const items = computeChecklist();
+  const allDone = items.every(i => i.done);
+  if (allDone) {
+    card.classList.add('hidden');
+    return;
+  }
+  card.classList.remove('hidden');
+  $('#checklistItems').innerHTML = items.map(i => `
+    <button class="checklist-item${i.done ? ' done' : ''}" data-view="${i.view}">
+      <span class="checklist-check">${i.done ? '✓' : ''}</span>
+      <span class="checklist-text"><strong>${esc(i.title)}</strong><span>${esc(i.sub)}</span></span>
+      <span class="checklist-arrow">→</span>
+    </button>
+  `).join('');
+  $all('.checklist-item', card).forEach(btn => {
+    btn.addEventListener('click', () => showView(btn.dataset.view));
+  });
+}
+
+/* ---------------------------------------------------------------------- */
 /* Navigation                                                             */
 /* ---------------------------------------------------------------------- */
 function showView(name) {
@@ -1515,6 +1653,24 @@ function init() {
   $all('.nav-item').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view)));
   $('#settingsShortcut').addEventListener('click', () => showView('settings'));
   $('#dashGoToPostToday').addEventListener('click', () => showView('today'));
+
+  // Guided onboarding
+  $('#helpShortcut').addEventListener('click', () => openOnboarding(0));
+  $('#closeOnboarding').addEventListener('click', closeOnboarding);
+  $('#onboardingModal').addEventListener('click', (e) => { if (e.target === $('#onboardingModal')) closeOnboarding(); });
+  $('#onboardingBack').addEventListener('click', () => {
+    if (onboardingIndex > 0) { onboardingIndex--; renderOnboardingStep(); }
+  });
+  $('#onboardingNext').addEventListener('click', () => {
+    if (onboardingIndex < ONBOARDING_STEPS.length - 1) { onboardingIndex++; renderOnboardingStep(); }
+    else closeOnboarding();
+  });
+
+  // Getting started checklist
+  $('#dismissChecklist').addEventListener('click', () => {
+    localStorage.setItem(LS.checklistDismissed, '1');
+    $('#gettingStartedCard').classList.add('hidden');
+  });
 
   // Upload
   $('#fileInput').addEventListener('change', (e) => handleFiles(e.target.files));
@@ -1579,6 +1735,10 @@ function init() {
   });
 
   renderEverything();
+
+  if (localStorage.getItem(LS.onboardingSeen) !== '1') {
+    openOnboarding(0);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
