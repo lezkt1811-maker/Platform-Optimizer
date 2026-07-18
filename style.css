@@ -326,6 +326,7 @@ input[type="number"]{
 }
 .tag.gold{ background: rgba(232,195,92,.12); color: var(--gold); border-color: rgba(232,195,92,.3); }
 .tag.purple{ background: rgba(168,85,247,.12); color: var(--purple); border-color: rgba(168,85,247,.3); }
+.tag.good{ background: rgba(75,227,160,.12); color: var(--good); border-color: rgba(75,227,160,.35); }
 
 /* Score orb */
 .orb-row{ display:flex; gap:14px; flex-wrap:wrap; justify-content:space-between; margin: 14px 0; }
@@ -452,3 +453,69 @@ input[type="number"]{
 @media (prefers-reduced-motion: reduce){
   *{ animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* ==========================================================================
+   Guided onboarding + getting started additions
+   ========================================================================== */
+
+.topbar-actions{ display:flex; align-items:center; gap:8px; }
+
+/* Step badges under view headings */
+.step-badge{
+  display:inline-block; margin-top:8px; font-size:12px; line-height:1.5;
+  color: var(--neon-blue); background: rgba(53,214,255,.08);
+  border: 1px solid rgba(53,214,255,.25); border-radius: 999px;
+  padding: 6px 12px;
+}
+
+/* Getting started checklist card on Dashboard */
+.checklist-card{ position:relative; }
+.checklist-dismiss{
+  position:absolute; top:14px; right:14px; background: transparent; border:none;
+  color: var(--text-3); font-size:13px; cursor:pointer; width:26px; height:26px;
+  border-radius:50%; display:flex; align-items:center; justify-content:center;
+}
+.checklist-dismiss:hover{ color: var(--text-1); background: var(--glass); }
+.checklist{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+.checklist-item{
+  display:flex; align-items:center; gap:12px; text-align:left;
+  background: var(--glass); border:1px solid var(--glass-border);
+  border-radius: var(--radius-sm); padding:12px 14px; cursor:pointer;
+  width:100%; color: var(--text-1); font-family: var(--font-body); font-size:13.5px;
+  transition: border-color .2s, background .2s;
+}
+.checklist-item:hover{ border-color: var(--neon-blue); }
+.checklist-item.done{ opacity:.62; }
+.checklist-check{
+  flex:0 0 auto; width:24px; height:24px; border-radius:50%;
+  border:1.5px solid var(--text-3); display:flex; align-items:center; justify-content:center;
+  font-size:13px; color: transparent; transition: all .2s;
+}
+.checklist-item.done .checklist-check{
+  border-color: var(--good); background: rgba(75,227,160,.15); color: var(--good);
+}
+.checklist-text{ display:flex; flex-direction:column; gap:2px; flex:1; }
+.checklist-text strong{ font-size:13.5px; font-weight:600; }
+.checklist-text span{ font-size:12px; color: var(--text-3); }
+.checklist-arrow{ color: var(--text-3); font-size:14px; }
+
+/* Onboarding modal */
+.onboarding-modal{ padding-top:44px; text-align:left; }
+.onboarding-step-eyebrow{
+  font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+  color: var(--gold); margin:0 0 6px;
+}
+.onboarding-step-title{
+  font-family: var(--font-display); font-size:22px; margin:0 0 12px; color: var(--text-1);
+}
+.onboarding-step-body{ font-size:14.5px; line-height:1.6; color: var(--text-2); margin:0; }
+.onboarding-step-body strong{ color: var(--text-1); }
+.onboarding-dots{ display:flex; justify-content:center; gap:8px; margin-top:22px; }
+.onboarding-dot{
+  width:7px; height:7px; border-radius:50%; background: var(--glass-border);
+  transition: background .2s, transform .2s;
+}
+.onboarding-dot.active{ background: var(--neon-blue); transform: scale(1.3); }
+.onboarding-actions{ display:flex; justify-content:space-between; gap:12px; margin-top:22px; }
+.onboarding-actions .btn{ flex:1; justify-content:center; }
+.onboarding-actions .btn.hidden{ visibility:hidden; }
