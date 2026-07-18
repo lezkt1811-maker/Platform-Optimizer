@@ -22,7 +22,10 @@
       <span class="brand-glyph">✦</span>
       <span class="brand-name">Trend Oracle</span>
     </div>
-    <button class="icon-btn" id="settingsShortcut" title="Settings" aria-label="Open settings">⚙</button>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="helpShortcut" title="How it works" aria-label="Open guide">?</button>
+      <button class="icon-btn" id="settingsShortcut" title="Settings" aria-label="Open settings">⚙</button>
+    </div>
   </header>
 
   <!-- Main views -->
@@ -41,6 +44,13 @@
         <h2 id="dashTopTrendName">No trends charted yet</h2>
         <p class="muted" id="dashTopTrendWhy">Upload a few screenshots to let the Oracle read the sky.</p>
         <button class="btn btn-primary" id="dashGoToPostToday">Open full reading →</button>
+      </div>
+
+      <div class="glass-card checklist-card hidden" id="gettingStartedCard">
+        <button class="checklist-dismiss" id="dismissChecklist" title="Hide this" aria-label="Hide getting started">✕</button>
+        <h3 class="card-title">Getting started</h3>
+        <p class="muted small">Four steps from a blank slate to a ready-to-post idea.</p>
+        <div class="checklist" id="checklistItems"></div>
       </div>
 
       <div class="stat-grid">
@@ -82,6 +92,7 @@
       <div class="view-head">
         <p class="eyebrow">Feed the Oracle</p>
         <h1>Upload Screenshots</h1>
+        <p class="step-badge">Step 1 of 4 — screenshot the analytics, trending page, or search results you want the Oracle to read</p>
       </div>
 
       <label class="dropzone" id="dropzone" for="fileInput">
@@ -168,6 +179,7 @@
       <div class="view-head">
         <p class="eyebrow">One reading, one action</p>
         <h1>Post This Today</h1>
+        <p class="step-badge">Step 2 of 4 — the Oracle picks your single highest-scoring trend so you don't have to guess</p>
       </div>
 
       <div id="todayContent"></div>
@@ -179,6 +191,7 @@
       <div class="view-head">
         <p class="eyebrow">Turn a trend into a script</p>
         <h1>Generate Post</h1>
+        <p class="step-badge">Step 3 of 4 — pick a trend and get a ready-to-use script and caption</p>
       </div>
 
       <div class="field-row">
@@ -228,6 +241,7 @@
       <div class="view-head">
         <p class="eyebrow">Tell the Oracle what happened</p>
         <h1>Performance Tracker</h1>
+        <p class="step-badge">Step 4 of 4 — log how a post did so the Oracle learns what works for you</p>
       </div>
 
       <div class="field-row">
@@ -329,6 +343,19 @@
 <!-- Library item detail modal -->
 <div class="modal-overlay hidden" id="libraryModal">
   <div class="modal glass-card" id="libraryModalContent"></div>
+</div>
+
+<!-- Onboarding / guide modal -->
+<div class="modal-overlay hidden" id="onboardingModal">
+  <div class="modal glass-card onboarding-modal">
+    <button class="modal-close" id="closeOnboarding" aria-label="Close guide">✕</button>
+    <div id="onboardingBody"></div>
+    <div class="onboarding-dots" id="onboardingDots"></div>
+    <div class="onboarding-actions">
+      <button class="btn btn-ghost" id="onboardingBack">← Back</button>
+      <button class="btn btn-primary" id="onboardingNext">Next →</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
